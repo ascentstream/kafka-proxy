@@ -304,6 +304,8 @@ func listenInstance(dst chan<- Conn, cfg *ListenerConfig, opts TCPConnOptions, l
 				}
 			}
 			brokerAddress := cfg.GetBrokerAddress()
+			// Record the port of the local listener for metrics.
+			proxyLocalListeners.WithLabelValues(brokerAddress).Set(float64(l.Addr().(*net.TCPAddr).Port))
 			if cfg.BrokerID != UnknownBrokerID {
 				logrus.Infof("New connection for %s brokerId %d", brokerAddress, cfg.BrokerID)
 			} else {
