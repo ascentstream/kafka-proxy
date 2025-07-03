@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"sync"
 	"text/template"
@@ -34,8 +35,9 @@ type Listeners struct {
 	currentDynamicPortCounter uint64
 	dynamicSequentialMaxPorts uint16
 
-	brokerToListenerConfig map[string]*ListenerConfig
-	lock                   sync.RWMutex
+	brokerToListenerConfig      map[string]*ListenerConfig
+	lock                        sync.RWMutex
+	brokerAddressSequenceRegexp string
 }
 
 func NewListeners(cfg *config.Config) (*Listeners, error) {
@@ -67,17 +69,18 @@ func NewListeners(cfg *config.Config) (*Listeners, error) {
 	}
 
 	return &Listeners{
-		defaultListenerIP:         cfg.Proxy.DefaultListenerIP,
-		dynamicAdvertisedListener: cfg.Proxy.DynamicAdvertisedListener,
-		connSrc:                   make(chan Conn, 1),
-		brokerToListenerConfig:    brokerToListenerConfig,
-		tcpConnOptions:            tcpConnOptions,
-		listenFunc:                listenFunc,
-		deterministicListeners:    cfg.Proxy.DeterministicListeners,
-		disableDynamicListeners:   cfg.Proxy.DisableDynamicListeners,
-		dynamicSequentialMinPort:  cfg.Proxy.DynamicSequentialMinPort,
-		currentDynamicPortCounter: 0,
-		dynamicSequentialMaxPorts: cfg.Proxy.DynamicSequentialMaxPorts,
+		defaultListenerIP:           cfg.Proxy.DefaultListenerIP,
+		dynamicAdvertisedListener:   cfg.Proxy.DynamicAdvertisedListener,
+		connSrc:                     make(chan Conn, 1),
+		brokerToListenerConfig:      brokerToListenerConfig,
+		tcpConnOptions:              tcpConnOptions,
+		listenFunc:                  listenFunc,
+		deterministicListeners:      cfg.Proxy.DeterministicListeners,
+		disableDynamicListeners:     cfg.Proxy.DisableDynamicListeners,
+		dynamicSequentialMinPort:    cfg.Proxy.DynamicSequentialMinPort,
+		currentDynamicPortCounter:   0,
+		dynamicSequentialMaxPorts:   cfg.Proxy.DynamicSequentialMaxPorts,
+		brokerAddressSequenceRegexp: cfg.Proxy.BrokerAddressSequenceRegexp,
 	}, nil
 }
 
@@ -159,11 +162,34 @@ func (p *Listeners) nextDynamicPort(portOffset uint64, brokerAddress string, bro
 	if p.dynamicSequentialMaxPorts == 0 {
 		return 0, fmt.Errorf("dynamic sequential max ports is 0")
 	}
-	port := p.dynamicSequentialMinPort + uint16(portOffset%uint64(p.dynamicSequentialMaxPorts))
-	if port < p.dynamicSequentialMinPort {
-		return 0, fmt.Errorf("port assignment overflow %s %d: %d", brokerAddress, brokerId, port)
+
+	if p.brokerAddressSequenceRegexp == "" {
+		port := p.dynamicSequentialMinPort + uint16(portOffset%uint64(p.dynamicSequentialMaxPorts))
+		if port < p.dynamicSequentialMinPort {
+			return 0, fmt.Errorf("port assignment overflow %s %d: %d", brokerAddress, brokerId, port)
+		}
+		return port, nil
 	}
-	return port, nil
+
+	// We can extract the port offset from the broker address using a regex.
+	// It is for the purpose of a same broker to have the same port on the different proxy instances.
+	regex, err := regexp.Compile(p.brokerAddressSequenceRegexp)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compile listener port regex %s: %w", p.brokerAddressSequenceRegexp, err)
+	}
+	if match := regex.FindStringSubmatch(brokerAddress); match != nil {
+		// match[1] is the first capturing group in the regex.
+		urlSeq, err := strconv.ParseUint(match[1], 10, 16)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse port from broker address %s: %w", brokerAddress, err)
+		}
+		if p.dynamicSequentialMaxPorts > 0 && urlSeq > uint64(p.dynamicSequentialMaxPorts) {
+			return 0, fmt.Errorf("port offset %d is greater than dynamic sequential max ports %d for broker %s", urlSeq, p.dynamicSequentialMaxPorts, brokerAddress)
+
+		}
+		return uint16(urlSeq) + p.dynamicSequentialMinPort, nil
+	}
+	return 0, fmt.Errorf("broker address %s does not match listener port regex %s", brokerAddress, p.brokerAddressSequenceRegexp)
 }
 
 func (p *Listeners) ListenDynamicInstance(brokerAddress string, brokerId int32) (string, int32, error) {
