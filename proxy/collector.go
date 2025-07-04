@@ -35,6 +35,11 @@ var (
 		prometheus.CounterOpts{Name: "proxy_local_auth_total",
 			Help: "Total number of local auth requests sent"},
 		[]string{"success", "status"})
+
+	proxyLocalListeners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "proxy_local_listeners",
+			Help: "Kafka proxy local listener ports"},
+		[]string{"broker_addr"})
 )
 
 func init() {
