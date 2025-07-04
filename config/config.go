@@ -74,20 +74,21 @@ type Config struct {
 		MsgFiledName   string
 	}
 	Proxy struct {
-		DefaultListenerIP         string
-		BootstrapServers          []ListenerConfig
-		ExternalServers           []ListenerConfig
-		DeterministicListeners    bool
-		DialAddressMappings       []DialAddressMapping
-		DisableDynamicListeners   bool
-		DynamicAdvertisedListener string
-		DynamicSequentialMinPort  uint16
-		DynamicSequentialMaxPorts uint16
-		RequestBufferSize         int
-		ResponseBufferSize        int
-		ListenerReadBufferSize    int // SO_RCVBUF
-		ListenerWriteBufferSize   int // SO_SNDBUF
-		ListenerKeepAlive         time.Duration
+		DefaultListenerIP           string
+		BootstrapServers            []ListenerConfig
+		ExternalServers             []ListenerConfig
+		DeterministicListeners      bool
+		DialAddressMappings         []DialAddressMapping
+		DisableDynamicListeners     bool
+		DynamicAdvertisedListener   string
+		DynamicSequentialMinPort    uint16
+		DynamicSequentialMaxPorts   uint16
+		RequestBufferSize           int
+		ResponseBufferSize          int
+		ListenerReadBufferSize      int // SO_RCVBUF
+		ListenerWriteBufferSize     int // SO_SNDBUF
+		ListenerKeepAlive           time.Duration
+		BrokerAddressSequenceRegexp string
 
 		TLS struct {
 			Enable                   bool

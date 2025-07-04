@@ -482,3 +482,50 @@ func TestNextDynamicPort(t *testing.T) {
 		})
 	}
 }
+
+func TestNextDynamicPortWithRegexp(t *testing.T) {
+	tests := []struct {
+		name                        string
+		portOffset                  uint64
+		minPort                     uint16
+		maxPorts                    uint16
+		expectedNextPort            uint16
+		expectError                 bool
+		brokerAddressSequenceRegexp string
+	}{
+		{
+			name:                        "broker 0",
+			portOffset:                  0,
+			minPort:                     30000,
+			maxPorts:                    1,
+			expectedNextPort:            30000,
+			brokerAddressSequenceRegexp: "-(\\d+)\\.",
+		},
+		{
+			name:                        "broker 999",
+			portOffset:                  999,
+			minPort:                     30000,
+			maxPorts:                    1000,
+			expectedNextPort:            30999,
+			brokerAddressSequenceRegexp: "-(\\d+)\\.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			listeners := &Listeners{
+				dynamicSequentialMinPort:    tt.minPort,
+				dynamicSequentialMaxPorts:   tt.maxPorts,
+				brokerAddressSequenceRegexp: tt.brokerAddressSequenceRegexp,
+			}
+			brokerAddr := fmt.Sprintf("asp-demo-broker-%d.asp-demo-broker-headless.asp-pulsar.svc", tt.portOffset)
+			nextPort, err := listeners.nextDynamicPort(tt.portOffset, brokerAddr, int32(tt.portOffset))
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedNextPort, nextPort)
+			}
+		})
+	}
+}
